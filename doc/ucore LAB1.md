@@ -195,3 +195,38 @@ print_stackframe(void) {
 
 ## Exercise 6
 
+#### Exercise 6.1
+
+**中断描述符表（也可简称为保护模式下的中断向量表）中一个表项占多少字节？其中哪几位代表中断处理代码的入口？**
+
+* Interrupt Descriptor 为 0x40 即 64个字节。 
+* [0..15] 为中断处理函数入口的lower bits， [16..31]为中断处理函数入口的middle bits， [32..63] 为中断处理函数入口的higher bits、
+
+#### Exercise 6.2
+
+**请编程完善kern/trap/trap.c中对中断向量表进行初始化的函数idt_init。在idt_init函数中，依次对所有中断入口进行初始化。使用mmu.h中的SETGATE宏，填充idt数组内容。每个中断的入口由tools/vectors.c生成，使用trap.c中声明的vectors数组即可。**
+
+```c
+void idt_init(void) {
+    extern uint32_t __vectors[];
+    int i;
+
+    // Exception Gate
+    for (i = 0; i < 32; ++i) {
+        SETGATE(idt[i], 1, 8, __vectors[i], 0);
+    }
+
+    // Interrupt Gate
+    for (i = 32; i < 256; ++i) {
+        if (i == 0x80) {
+            // syscall
+            SETGATE(idt[i], 8, 0, __vectors[i], 3);
+        } else {
+            SETGATE(idt[i], 8, 0, __vectors[i], 0);
+        }
+    }
+
+    lidt(&idt_pd);
+}
+```
+
