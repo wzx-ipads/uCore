@@ -3,6 +3,11 @@
 #include <string.h>
 #include <default_pmm.h>
 
+free_area_t free_area;
+
+#define free_list (free_area.free_list)
+#define nr_free (free_area.nr_free)
+
 /*  In the First Fit algorithm, the allocator keeps a list of free blocks
  * (known as the free list). Once receiving a allocation request for memory,
  * it scans along the list for the first block that is large enough to satisfy
@@ -15,6 +20,121 @@
 // LAB2 EXERCISE 1: YOUR CODE
 // you should rewrite functions: `default_init`, `default_init_memmap`,
 // `default_alloc_pages`, `default_free_pages`.
+static int count_free_list() {
+    int cnt = 0;
+    list_entry_t *list_node = free_list.next;
+    while(list_node != &free_list) {
+        cnt++;
+        list_node = list_node->next;
+    } 
+    return cnt;
+}
+
+static void
+default_init(void) {
+    list_init(&free_list);
+    nr_free = 0;
+}
+
+static void
+default_init_memmap(struct Page *base, size_t n) {
+    assert(n > 0);
+    struct Page *p = base;
+    for (; p < base + n; p++) {
+        assert(PageReserved(p));
+        p->ref = 0;
+        p->property = 0;
+        ClearPageReserved(p);
+        ClearPageProperty(p);
+    }
+   
+    base->property = n;
+    SetPageProperty(base);
+    list_add(&free_list, &(base->page_link));
+    nr_free += n;
+}
+
+static struct Page *
+default_alloc_pages(size_t n) {
+    assert(n > 0);
+
+    // out of memory
+    if (n > nr_free) {
+        return NULL;
+    }
+
+    list_entry_t *list_node = free_list.next;
+    while (list_node != &free_list) {
+        struct Page *page = le2page(list_node, page_link);
+        if (page->property >= n) {
+            // sanity check
+            assert(page->ref == 0 && PageProperty(page) && !PageReserved(page));
+
+            //page->ref ++;              // increase RC
+            ClearPageProperty(page);   // clear property bit
+            SetPageReserved(page);
+            list_del(&(page->page_link));
+
+            if (page->property > n) {
+                // the rest part of this block should be inserted to free list
+                struct Page *bench_page = page + n;
+                assert(bench_page->ref == 0 && !PageProperty(bench_page) 
+                       && !PageReserved(bench_page));
+
+                SetPageProperty(bench_page);
+                bench_page->ref = 0;
+                bench_page->property = page->property - n;
+                // add bench_page after page to orber list entry by address
+                list_add(&free_list, &bench_page->page_link);
+
+                // recalculate size
+                page->property = n;
+            }
+
+            nr_free -= n;
+            return page;
+        }
+        list_node = list_node->next;
+    }
+
+    return NULL;
+}
+
+static void
+default_free_pages(struct Page *base, size_t n) {
+    assert(n > 0);
+    struct Page *page = base;
+    for(; page < base + n; page++) {
+        page->flags = 0;
+        page->ref = 0;
+    }
+    base->property = n;
+    SetPageProperty(base);
+
+    list_entry_t *list_node = free_list.next;
+    while(list_node != &free_list) {
+        page = le2page(list_node, page_link);
+        list_node = list_node->next;
+
+        if (base + base->property == page) {
+            // merge with the next free block
+            ClearPageProperty(page);
+            base->property += page->property;
+            list_del(&page->page_link);
+        } else if (page + page->property == base) {
+            // merge with the previous block
+            page->property += base->property;
+            ClearPageProperty(base);
+            base = page;
+            list_del(&page->page_link);
+        }
+    }
+
+    nr_free += n;
+    list_add_before(&free_list, &base->page_link);
+    //list_add(&free_list, &base->page_link);
+}
+
 /*
  * Details of FFMA
  * (1) Preparation:
@@ -93,90 +213,6 @@
  *      Try to merge blocks at lower or higher addresses. Notice: This should
  *  change some pages' `p->property` correctly.
  */
-free_area_t free_area;
-
-#define free_list (free_area.free_list)
-#define nr_free (free_area.nr_free)
-
-static void
-default_init(void) {
-    list_init(&free_list);
-    nr_free = 0;
-}
-
-static void
-default_init_memmap(struct Page *base, size_t n) {
-    assert(n > 0);
-    struct Page *p = base;
-    for (; p != base + n; p ++) {
-        assert(PageReserved(p));
-        p->flags = p->property = 0;
-        set_page_ref(p, 0);
-    }
-    base->property = n;
-    SetPageProperty(base);
-    nr_free += n;
-    list_add(&free_list, &(base->page_link));
-}
-
-static struct Page *
-default_alloc_pages(size_t n) {
-    assert(n > 0);
-    if (n > nr_free) {
-        return NULL;
-    }
-    struct Page *page = NULL;
-    list_entry_t *le = &free_list;
-    while ((le = list_next(le)) != &free_list) {
-        struct Page *p = le2page(le, page_link);
-        if (p->property >= n) {
-            page = p;
-            break;
-        }
-    }
-    if (page != NULL) {
-        list_del(&(page->page_link));
-        if (page->property > n) {
-            struct Page *p = page + n;
-            p->property = page->property - n;
-            list_add(&free_list, &(p->page_link));
-    }
-        nr_free -= n;
-        ClearPageProperty(page);
-    }
-    return page;
-}
-
-static void
-default_free_pages(struct Page *base, size_t n) {
-    assert(n > 0);
-    struct Page *p = base;
-    for (; p != base + n; p ++) {
-        assert(!PageReserved(p) && !PageProperty(p));
-        p->flags = 0;
-        set_page_ref(p, 0);
-    }
-    base->property = n;
-    SetPageProperty(base);
-    list_entry_t *le = list_next(&free_list);
-    while (le != &free_list) {
-        p = le2page(le, page_link);
-        le = list_next(le);
-        if (base + base->property == p) {
-            base->property += p->property;
-            ClearPageProperty(p);
-            list_del(&(p->page_link));
-        }
-        else if (p + p->property == base) {
-            p->property += base->property;
-            ClearPageProperty(base);
-            base = p;
-            list_del(&(p->page_link));
-        }
-    }
-    nr_free += n;
-    list_add(&free_list, &(base->page_link));
-}
 
 static size_t
 default_nr_free_pages(void) {
