@@ -33,47 +33,6 @@ static const char * const error_string[MAXERROR + 1] = {
  * @width:      maximum number of digits, if the actual width is less than @width, use @padc instead
  * @padc:       character that padded on the left if the actual width is less than @width
  * */
-static void
-printnum(void (*putch)(int, void*), void *putdat,
-        unsigned long long num, unsigned base, int width, int padc) {
-    unsigned long long result = num;
-    unsigned mod = do_div(result, base);
-
-    // first recursively print all preceding (more significant) digits
-    if (num >= base) {
-        printnum(putch, putdat, result, base, width - 1, padc);
-    } else {
-        // print any needed pad characters before first digit
-        while (-- width > 0)
-            putch(padc, putdat);
-    }
-    // then print this (the least significant) digit
-    putch("0123456789abcdef"[mod], putdat);
-}
-
-/* *
- * getuint - get an unsigned int of various possible sizes from a varargs list
- * @ap:         a varargs list pointer
- * @lflag:      determines the size of the vararg that @ap points to
- * */
-static unsigned long long
-getuint(va_list *ap, int lflag) {
-    if (lflag >= 2) {
-        return va_arg(*ap, unsigned long long);
-    }
-    else if (lflag) {
-        return va_arg(*ap, unsigned long);
-    }
-    else {
-        return va_arg(*ap, unsigned int);
-    }
-}
-
-/* *
- * getint - same as getuint but signed, we can't use getuint because of sign extension
- * @ap:         a varargs list pointer
- * @lflag:      determines the size of the vararg that @ap points to
- * */
 static long long
 getint(va_list *ap, int lflag) {
     if (lflag >= 2) {
@@ -299,11 +258,7 @@ sprintputch(int ch, struct sprintbuf *b) {
  * snprintf - format a string and place it in a buffer
  * @str:        the buffer to place the result into
  * @size:       the size of buffer, including the trailing null space
- * @fmt:        the format string to use
  * */
-int
-snprintf(char *str, size_t size, const char *fmt, ...) {
-    va_list ap;
     int cnt;
     va_start(ap, fmt);
     cnt = vsnprintf(str, size, fmt, ap);

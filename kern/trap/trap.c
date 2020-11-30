@@ -169,7 +169,6 @@ trap_dispatch(struct trapframe *tf) {
     int ret;
 
     switch (tf->tf_trapno) {
-    case T_PGFLT:  //page fault
         if ((ret = pgfault_handler(tf)) != 0) {
             print_trapframe(tf);
             panic("handle pgfault failed. %e\n", ret);
@@ -180,10 +179,6 @@ trap_dispatch(struct trapframe *tf) {
     LAB3 : If some page replacement algorithm(such as CLOCK PRA) need tick to change the priority of pages, 
     then you can add code here. 
 #endif
-        /* LAB1 YOUR CODE : STEP 3 */
-        /* handle the timer interrupt */
-        /* (1) After a timer interrupt, you should record this event using a global variable (increase it), such as ticks in kern/driver/clock.c
-         * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
          * (3) Too Simple? Yes, I think so!
          */
         break;

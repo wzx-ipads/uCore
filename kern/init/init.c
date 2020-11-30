@@ -49,11 +49,11 @@ kern_init(void) {
     //LAB1: CAHLLENGE 1 If you try to do it, uncomment lab1_switch_test()
     // user/kernel mode switch test
     //lab1_switch_test();
+<<<<<<< HEAD
     
     cpu_idle();                 // run idle process
-}
 
-void __attribute__((noinline))
+    /* do nothing */
 grade_backtrace2(int arg0, int arg1, int arg2, int arg3) {
     mon_backtrace(0, NULL, NULL);
 }
